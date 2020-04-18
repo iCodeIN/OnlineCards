@@ -1,4 +1,4 @@
-package com.whileyweb;
+package cards;
 
 import java.io.File;
 import java.io.IOException;
@@ -10,24 +10,30 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.http.ConnectionClosedException;
 import org.apache.http.ExceptionLogger;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpException;
+import org.apache.http.HttpRequest;
+import org.apache.http.HttpResponse;
+import org.apache.http.HttpStatus;
+import org.apache.http.ParseException;
 import org.apache.http.config.SocketConfig;
 import org.apache.http.entity.ContentType;
+import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.bootstrap.HttpServer;
 import org.apache.http.impl.bootstrap.ServerBootstrap;
+import org.apache.http.message.BasicHttpEntityEnclosingRequest;
+import org.apache.http.protocol.HttpContext;
+import org.apache.http.protocol.HttpRequestHandler;
+import org.apache.http.util.EntityUtils;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
-import com.whileyweb.pages.FrontPage;
-import com.whileyweb.util.HtmlPage;
-
+import cards.game.CardGame;
+import cards.game.CardGameManager;
+import cards.pages.FrontPage;
+import cards.util.HtmlPage;
 import jwebkit.http.HttpFileHandler;
-import wyc.lang.WhileyFile;
-import wycc.cfg.ConfigFile;
-import wycc.lang.SemanticVersion;
-import wyfs.lang.Content;
-import wyfs.lang.Path;
-import wyfs.lang.Path.Entry;
-import wyfs.util.DirectoryRoot;
-import wyfs.util.ZipFile;
-import wyil.lang.WyilFile;
 
 /**
  * Responsible for initialising and starting the HTTP server which manages the
@@ -45,53 +51,17 @@ public class Main {
 	public static final ContentType IMAGE_PNG = ContentType.create("image/png");
 	public static final ContentType IMAGE_GIF = ContentType.create("image/gif");
 
-	/**
-	 * Default implementation of a content registry. This associates whiley and
-	 * wyil files with their respective content types.
-	 *
-	 * @author David J. Pearce
-	 *
-	 */
-	private static class Registry implements Content.Registry {
-		@Override
-		public void associate(Path.Entry e) {
-			String suffix = e.suffix();
-
-			if (suffix.equals("whiley")) {
-				e.associate(WhileyFile.ContentType, null);
-			} else if (suffix.equals("wyil")) {
-				e.associate(WyilFile.ContentType, null);
-			} else if (suffix.equals("toml")) {
-				e.associate(ConfigFile.ContentType, null);
-			} else if (suffix.equals("zip")) {
-				e.associate(ZipFile.ContentType, null);
-			}
-		}
-
-		@Override
-		public String suffix(Content.Type<?> t) {
-			return t.getSuffix();
-		}
-	}
-
-	private static final Registry REGISTRY = new Registry();
-
 	// =======================================================================
 	// Main Entry Point
 	// =======================================================================
 	public static void main(String[] argc) throws IOException {
 		// Determine location of repository
 		String userhome = System.getProperty("user.home");
-		String repositoryLocation = userhome + File.separator + ".whiley" + File.separator + "repository";
-		// Create the repository root
-		DirectoryRoot repository = new DirectoryRoot(repositoryLocation,REGISTRY);
-		// Determine list of installed packages
-		String[] pkgs = determineInstalledPackages(repository);
-		// Determine default configure deps
-		String[] deps = determineDefaultDependencies(pkgs,"std");
-		// Attempt to start the web server
+		CardGameManager manager = new CardGameManager();
+		//
+		// Attempt to start the web server		
 		try {
-			HttpServer server = startWebServer(repository,pkgs,deps);
+			HttpServer server = startWebServer(manager);
 			server.start();
 			server.awaitTermination(-1, TimeUnit.MILLISECONDS);
 		} catch(Exception e) {
@@ -99,8 +69,7 @@ public class Main {
 		}
 	}
 
-
-	public static HttpServer startWebServer(Path.Root repository, String[] packages, String[] dependencies) throws IOException {
+	public static HttpServer startWebServer(CardGameManager manager) throws IOException {
 		// Construct appropriate configuration for socket over which HTTP
 		// server will run.
 		SocketConfig socketConfig = SocketConfig.custom().setSoTimeout(1500).build();
@@ -120,13 +89,13 @@ public class Main {
 						.registerHandler("/bin/js/*", new HttpFileHandler(new File("."),TEXT_JAVASCRIPT))
 						.registerHandler("*.png", new HttpFileHandler(new File("."),IMAGE_PNG))
 						.registerHandler("*.gif", new HttpFileHandler(new File("."),IMAGE_GIF))
-						.registerHandler("/compile", new WhileyWebCompiler(REGISTRY, repository))
-						.registerHandler("/", new FrontPage(packages,dependencies))
+						.registerHandler("/play", new GameEventHandler(manager))
+						.registerHandler("/", new FrontPage())
 						.registerHandler("*", new HtmlPage())
 						.create();
 				// Attempt to start server
 				server.start();
-				System.out.println("WhileyWeb running on port " + port + ".");
+				System.out.println("Cards running on port " + port + ".");
 				return server;
 			} catch (BindException e) {
 				System.out.println("Port " + port + " in use by another application.");
@@ -149,44 +118,94 @@ public class Main {
             }
 		}
     }
-
-	private static String[] determineDefaultDependencies(String[] pkgs, String... deps) {
-		ArrayList<String> results = new ArrayList<>();
-		for (String dep : deps) {
-			String concrete = findLatestVersion(pkgs, dep);
-			if (concrete != null) {
-				results.add(concrete);
+    
+    private static class GameEventHandler implements HttpRequestHandler {
+    	private final CardGameManager manager;
+    	
+    	public GameEventHandler(CardGameManager manager) {
+    		this.manager = manager;
+    	}
+    	
+		@Override
+		public void handle(HttpRequest request, HttpResponse response, HttpContext context)
+				throws HttpException, IOException {
+			HttpEntity entity = checkHasEntity(request);
+			try {
+				// Parse compile request
+				JSONObject json = new JSONObject(EntityUtils.toString(entity));
+				// Extract room
+				String room = "default"; // FIXME
+				// Extract user
+				String user = "user"; // FIXME
+				// Process game event
+				processGameEvent(json, manager, room, user);
+				// Configure response
+				//response.setEntity(new StringEntity(r)); // ContentType.APPLICATION_JSON fails?
+				response.setStatusCode(HttpStatus.SC_OK);
+				// Done
+				return;
+			} catch (ParseException e) {
+			} catch (JSONException e) {
+			} catch (IOException e) {
 			}
-
-		}
-		System.out.println("Found " + results.size() + " matching dependencies.");
-		return results.toArray(new String[results.size()]);
-	}
-
-	private static String findLatestVersion(String[] pkgs, String dep) {
-		String prefix = dep + "-v";
-		String best = null;
-		SemanticVersion ver = null;
-		for (int i = 0; i != pkgs.length; ++i) {
-			String pkg = pkgs[i];
-			if (pkg.startsWith(prefix)) {
-				SemanticVersion v = new SemanticVersion(pkg.substring(prefix.length()));
-				if (best == null || v.compareTo(ver) > 0) {
-					best = pkg;
-					ver = v;
-				}
-			}
-		}
-		return best;
-	}
-
-    private static String[] determineInstalledPackages(DirectoryRoot repository) throws IOException {
-		List<Entry<ZipFile>> pkgs = repository.get(Content.filter("**", ZipFile.ContentType));
-		String[] items = new String[pkgs.size()];
-		for(int i=0;i!=pkgs.size();++i) {
-			items[i] = pkgs.get(i).id().toString();
-		}
-		System.out.println("Found " + items.length + " installed packages.");
-		return items;
+			// Malformed Request
+			response.setStatusCode(HttpStatus.SC_BAD_REQUEST);	
+		}    	
     }
+    
+	// ==================================================================
+	// Helpers
+	// ==================================================================
+
+	private static final int GAME_EVENT = 0;
+	private static final int ROOM_EVENT = 1;
+	private static final int TABLE_EVENT = 2;
+
+    /**
+	 * Process a given game event from a given JSON request.
+	 * 
+	 * @param json
+	 * @return
+	 * @throws JSONException
+	 */
+	public static void processGameEvent(JSONObject json, CardGameManager manager, String room, String user)
+			throws JSONException {
+		CardGame game = manager.getCardGame(room);
+		int type = json.getInt("type");
+		switch (type) {
+		case GAME_EVENT: {
+			if (game == null) {
+				System.out.println("CREATING GAME");
+				game = new CardGame();
+				manager.putCardGame(room, game);
+			} else {
+				manager.endCardGame(room);
+			}
+			break;
+		}
+		case ROOM_EVENT: {
+
+		}
+		case TABLE_EVENT: {
+
+		}
+		}
+	}
+    
+	public static String[] toStringArray(JSONArray arr) throws JSONException {
+		String[] items = new String[arr.length()];
+		for(int i=0;i!=items.length;++i) {
+			items[i] = arr.getString(i);
+		}
+		return items;
+	}
+	
+	private static HttpEntity checkHasEntity(HttpRequest request) throws HttpException {
+		if (request instanceof BasicHttpEntityEnclosingRequest) {
+			BasicHttpEntityEnclosingRequest r = (BasicHttpEntityEnclosingRequest) request;
+			return r.getEntity();
+		} else {
+			throw new HttpException("Missing entity");
+		}
+	}
 }
