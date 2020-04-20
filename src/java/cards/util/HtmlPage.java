@@ -90,6 +90,7 @@ public class HtmlPage implements HttpRequestHandler {
 		writer.println("<script type=\"text/javascript\" src=\"bin/js/std.js\"></script>");
 		writer.println("<script type=\"text/javascript\" src=\"bin/js/js.js\"></script>");
 		writer.println("<script type=\"text/javascript\" src=\"bin/js/dom.js\"></script>");
+		writer.println("<script type=\"text/javascript\" src=\"bin/js/web.js\"></script>");
 	    writer.println("<script type=\"text/javascript\" src=\"bin/js/cards.js\"></script>");
 		writer.println("</head>");
 	}

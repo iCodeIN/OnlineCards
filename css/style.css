@@ -6,7 +6,7 @@ body {
     margin: 0;
     padding: 0px;
     font-family: "helvetica";
-    background: #d5c397;       
+    background: #006600;       
 }
 
 #header {
@@ -17,6 +17,10 @@ body {
 }
 
 #container {
+    border: none;
+}
+
+#page {
     margin: 2em auto;
     padding: 0px;
     width: 1024px;
@@ -37,7 +41,7 @@ body {
 /* Loader Screen */
 /* ====================================================== */
 
-.loader {
+#loader {
     margin: auto;
     position: absolute;
     top: 0; left: 0; bottom: 0; right: 0;    

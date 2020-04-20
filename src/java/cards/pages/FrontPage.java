@@ -13,9 +13,11 @@ public class FrontPage extends HtmlPage {
 
 	@Override
 	public void writeBodyContent(PrintStream writer, Map<String,String> parameters) {
-		writer.println("<div class=\"loader\"></div>");
+		writer.println("<div id=\"container\">");
+		writer.println("<div id=\"loader\"></div>");
+		writer.println("</div>");
 		writer.println("<script>");
-		writer.println("window.onload = function() { cards$run(document); };");
+		writer.println("window.onload = function() { cards$main$run(document); };");
 		writer.println("</script>");
 	}
 }
