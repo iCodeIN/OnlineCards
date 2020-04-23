@@ -74,6 +74,10 @@ public function entering_room(State state) -> State:
     state.state = ENTERING
     return state
 
+public function entered_room(State state) -> State:
+    state.state = PLAYING
+    return state
+
 public function creating_room(State state) -> State:
     state.state = CREATING
     return state

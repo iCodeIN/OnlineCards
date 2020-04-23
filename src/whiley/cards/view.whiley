@@ -1,13 +1,19 @@
 package cards
 
+import string from js::core
 import web::html with click,id,name,sfor,tYpe
-import cards::io
+import web::io
 import cards::model with State
 
-// An alias to simply code
-type MyNode is html::Node<State,io::Action>
+// Aliases to simplify code
+public type IoAction is io::Action<State>
+public type IoNode is html::Node<State,IoAction>
 
-public function render(State st) -> html::Node<State,io::Action>:
+// =========================================================================
+// Rendering
+// =========================================================================
+
+public function render(State st) -> IoNode:
     switch st.state:
         case model::WAITING:
             return render_waiting()
@@ -15,10 +21,12 @@ public function render(State st) -> html::Node<State,io::Action>:
             return render_loading()
         case model::CREATING:
             return render_loading()
+        case model::PLAYING:
+            return render_playing()
     // Dummy IO handler
     return html::div("hello")
 
-function render_waiting() -> html::Node<State,io::Action>:
+function render_waiting() -> IoNode:
     return html::div([
         html::class("modal")
     ],[
@@ -29,11 +37,28 @@ function render_waiting() -> html::Node<State,io::Action>:
         html::button([click(&create_room)],"Create New Room")    
     ])
 
-function enter_room(html::MouseEvent e, State st) -> (State sr, io::Action[] as):    
-    return model::entering_room(st),[]
-
-function create_room(html::MouseEvent e, State st) -> (State sr, io::Action[] as):
-    return model::creating_room(st),[]
-
-function render_loading() -> html::Node<State,io::Action>:
+function render_loading() -> IoNode:
     return html::div([html::id("loader")],"")
+
+function render_playing() -> IoNode:
+    return html::div([
+        html::class("table")
+    ],"")
+
+// =========================================================================
+// Events
+// =========================================================================
+
+function enter_room(html::MouseEvent e, State st) -> (State sr, IoAction[] as):    
+    return model::entering_room(st),[
+        {url:"/play",ok:&entered_room,error:&entering_failed}
+    ]
+
+function entered_room(State st, string response) -> (State sr, IoAction[] as):
+    return model::entered_room(st),[]
+
+function entering_failed(State st) -> (State sr, IoAction[] as):
+    return st,[]
+
+function create_room(html::MouseEvent e, State st) -> (State sr, IoAction[] as):
+    return model::creating_room(st),[]
