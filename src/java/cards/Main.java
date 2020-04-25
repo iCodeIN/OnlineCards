@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.net.BindException;
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -89,7 +90,7 @@ public class Main {
 						.registerHandler("/bin/js/*", new HttpFileHandler(new File("."),TEXT_JAVASCRIPT))
 						.registerHandler("*.png", new HttpFileHandler(new File("."),IMAGE_PNG))
 						.registerHandler("*.gif", new HttpFileHandler(new File("."),IMAGE_GIF))
-						.registerHandler("/play", new GameEventHandler(manager))
+						.registerHandler("/room/*", new GameEventHandler(manager))
 						.registerHandler("/", new FrontPage())
 						.registerHandler("*", new HtmlPage())
 						.create();
@@ -129,24 +130,33 @@ public class Main {
 		@Override
 		public void handle(HttpRequest request, HttpResponse response, HttpContext context)
 				throws HttpException, IOException {
-			HttpEntity entity = checkHasEntity(request);
 			try {
-				// Parse compile request
-				JSONObject json = new JSONObject(EntityUtils.toString(entity));
-				// Extract room
-				String room = "default"; // FIXME
-				// Extract user
-				String user = "user"; // FIXME
-				// Process game event
-				processGameEvent(json, manager, room, user);
-				// Configure response
-				//response.setEntity(new StringEntity(r)); // ContentType.APPLICATION_JSON fails?
-				response.setStatusCode(HttpStatus.SC_OK);
-				// Done
-				return;
+				String[] components = request.getRequestLine().getUri().split("/");
+				if(components.length == 3) {
+					// Check whether we have an entity
+					HttpEntity entity = checkHasEntity(request);
+					// Parse compile request
+					JSONObject json = new JSONObject(EntityUtils.toString(entity));
+					// Extract room
+					String room = components[2];
+					// Extract user
+					String user = "user"; // FIXME
+					// Process game event
+					processGameEvent(json, manager, room, user);
+					// Configure response
+					//response.setEntity(new StringEntity(r)); // ContentType.APPLICATION_JSON fails?
+					response.setStatusCode(HttpStatus.SC_OK);
+					// Done
+					return;
+				}
 			} catch (ParseException e) {
+				e.printStackTrace();
 			} catch (JSONException e) {
+				e.printStackTrace();
 			} catch (IOException e) {
+				e.printStackTrace();
+			} finally {
+				System.out.println("FINALLY");
 			}
 			// Malformed Request
 			response.setStatusCode(HttpStatus.SC_BAD_REQUEST);	
@@ -157,10 +167,34 @@ public class Main {
 	// Helpers
 	// ==================================================================
 
-	private static final int GAME_EVENT = 0;
-	private static final int ROOM_EVENT = 1;
-	private static final int TABLE_EVENT = 2;
+	private static final int CREATE_ROOM = 0;
+	private static final int REMOVE_ROOM = 1;
+	private static final int ENTER_ROOM = 2;
+	private static final int LEAVE_ROOM = 3;
+	private static final int ROOM_STATUS = 4;
 
+	private static class Response {
+		private final int kind;
+		private final CardGame room;
+
+		public Response(int kind, CardGame room) {
+			this.kind = kind;
+			this.room = room;
+		}
+
+		public String toString() {
+			return "{ kind: " + kind + ", room: " + toString(room) + "}";
+		}
+
+		private String toString(CardGame room) {
+			if (room == null) {
+				return "null";
+			} else {
+				return "{}";
+			}
+		}
+	}
+	
     /**
 	 * Process a given game event from a given JSON request.
 	 * 
@@ -168,28 +202,33 @@ public class Main {
 	 * @return
 	 * @throws JSONException
 	 */
-	public static void processGameEvent(JSONObject json, CardGameManager manager, String room, String user)
+	public static Response processGameEvent(JSONObject json, CardGameManager manager, String room, String user)
 			throws JSONException {
+		Response response = null;
+		System.out.println(">>> PROCESS EVENT");
 		CardGame game = manager.getCardGame(room);
-		int type = json.getInt("type");
+		int type = json.getInt("kind");
 		switch (type) {
-		case GAME_EVENT: {
+		case CREATE_ROOM: {
+			System.out.println(">>>>>> CREATE ROOM");
 			if (game == null) {
-				System.out.println("CREATING GAME");
 				game = new CardGame();
 				manager.putCardGame(room, game);
+				response = new Response(ROOM_STATUS, game);
 			} else {
-				manager.endCardGame(room);
+				// FIXME: should be an error here
+				throw new IllegalArgumentException("GOT HERE");
 			}
+			System.out.println("<<<<<< CREATE ROOM");
 			break;
 		}
-		case ROOM_EVENT: {
-
-		}
-		case TABLE_EVENT: {
-
+		case REMOVE_ROOM: {
+			manager.endCardGame(room);
+			break;
 		}
 		}
+		System.out.println("<<< PROCESS EVENT: "  + response);
+		return response;
 	}
     
 	public static String[] toStringArray(JSONArray arr) throws JSONException {

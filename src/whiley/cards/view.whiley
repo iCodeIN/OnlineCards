@@ -1,6 +1,7 @@
 package cards
 
-import string from js::core
+import js::core with string, append
+import js::JSON
 import web::html with click,id,name,sfor,tYpe
 import web::io
 import cards::model with State
@@ -51,7 +52,7 @@ function render_playing() -> IoNode:
 
 function enter_room(html::MouseEvent e, State st) -> (State sr, IoAction[] as):    
     return model::entering_room(st),[
-        {url:"/play",ok:&entered_room,error:&entering_failed}
+        send("dave",{kind:ENTER_ROOM})
     ]
 
 function entered_room(State st, string response) -> (State sr, IoAction[] as):
@@ -61,4 +62,38 @@ function entering_failed(State st) -> (State sr, IoAction[] as):
     return st,[]
 
 function create_room(html::MouseEvent e, State st) -> (State sr, IoAction[] as):
-    return model::creating_room(st),[]
+    return model::creating_room(st),[
+        send("dave",{kind:CREATE_ROOM})
+    ]
+
+/**
+ * Handler for given request / response pair
+ */ 
+function response(State st, Request request, string response) -> (State sr, IoAction[] as):
+    // Convert response into something usable.
+    return st,[]
+
+// =========================================================================
+// Message I/O
+// =========================================================================
+
+final int CREATE_ROOM = 0
+final int REMOVE_ROOM = 1
+final int ENTER_ROOM = 2
+final int LEAVE_ROOM = 3
+
+// Represents a request from this client to the server.  All requests
+// match this format.
+type Request is {
+    int kind
+}
+// Message kind is valid
+where 0 <= kind && kind <= 4
+
+function send(string room, Request req) -> io::Post<State>:
+    // Construct URL target
+    room = append("/room/",room)
+    // Convert request into JSON
+    string json = JSON::stringify(req)
+    // Create actual POST action
+    return {url:room,payload:json,ok:&(State st, string r -> response(st,req,r)),error:&entering_failed}
