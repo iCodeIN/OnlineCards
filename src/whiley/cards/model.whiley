@@ -70,14 +70,23 @@ public type Player is {
 public function init() -> State:
     return { state: WAITING, room: null}
 
+/**
+ * Attempting to enter room
+ */
 public function entering_room(State state) -> State:
     state.state = ENTERING
     return state
 
-public function entered_room(State state) -> State:
-    state.state = PLAYING
-    return state
-
+/**
+ * Attempting to create room
+ */
 public function creating_room(State state) -> State:
     state.state = CREATING
+    return state
+
+/**
+ * Room status update received
+ */
+public function update(State state) -> State:
+    state.state = PLAYING
     return state

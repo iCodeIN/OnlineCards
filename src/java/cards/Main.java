@@ -142,9 +142,13 @@ public class Main {
 					// Extract user
 					String user = "user"; // FIXME
 					// Process game event
-					processGameEvent(json, manager, room, user);
+					Response r = processGameEvent(json, manager, room, user);
 					// Configure response
-					//response.setEntity(new StringEntity(r)); // ContentType.APPLICATION_JSON fails?
+					if(r != null) {
+						System.out.println("RESPONSE: " + r.toJSON());
+						json = r.toJSON();
+						response.setEntity(new StringEntity(json.toString())); // ContentType.APPLICATION_JSON fails?
+					}
 					response.setStatusCode(HttpStatus.SC_OK);
 					// Done
 					return;
@@ -171,7 +175,7 @@ public class Main {
 	private static final int REMOVE_ROOM = 1;
 	private static final int ENTER_ROOM = 2;
 	private static final int LEAVE_ROOM = 3;
-	private static final int ROOM_STATUS = 4;
+	private static final int ROOM_STATE = 4;
 
 	private static class Response {
 		private final int kind;
@@ -182,16 +186,10 @@ public class Main {
 			this.room = room;
 		}
 
-		public String toString() {
-			return "{ kind: " + kind + ", room: " + toString(room) + "}";
-		}
-
-		private String toString(CardGame room) {
-			if (room == null) {
-				return "null";
-			} else {
-				return "{}";
-			}
+		public JSONObject toJSON() throws JSONException {
+			JSONObject obj = new JSONObject();
+			obj.put("kind", kind);
+			return obj;
 		}
 	}
 	
@@ -214,10 +212,10 @@ public class Main {
 			if (game == null) {
 				game = new CardGame();
 				manager.putCardGame(room, game);
-				response = new Response(ROOM_STATUS, game);
+				response = new Response(ROOM_STATE, null);
 			} else {
 				// FIXME: should be an error here
-				throw new IllegalArgumentException("GOT HERE");
+				throw new IllegalArgumentException("ATTEMPT CREATE DUPLICATE GAME");
 			}
 			System.out.println("<<<<<< CREATE ROOM");
 			break;

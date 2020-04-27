@@ -1,5 +1,6 @@
 package cards
 
+import uint from std::integer
 import js::core with string, append
 import js::JSON
 import web::html with click,id,name,sfor,tYpe
@@ -44,10 +45,10 @@ function render_loading() -> IoNode:
 function render_playing() -> IoNode:
     return html::div([
         html::class("table")
-    ],"")
+    ],"Hello World")
 
 // =========================================================================
-// Events
+// Request Events
 // =========================================================================
 
 function enter_room(html::MouseEvent e, State st) -> (State sr, IoAction[] as):    
@@ -55,32 +56,47 @@ function enter_room(html::MouseEvent e, State st) -> (State sr, IoAction[] as):
         send("dave",{kind:ENTER_ROOM})
     ]
 
-function entered_room(State st, string response) -> (State sr, IoAction[] as):
-    return model::entered_room(st),[]
-
-function entering_failed(State st) -> (State sr, IoAction[] as):
-    return st,[]
-
 function create_room(html::MouseEvent e, State st) -> (State sr, IoAction[] as):
     return model::creating_room(st),[
         send("dave",{kind:CREATE_ROOM})
     ]
 
+// =========================================================================
+// Response Events
+// =========================================================================
+
+type Response is {
+    uint kind,
+    null|model::Room room   
+}
+
 /**
  * Handler for given request / response pair
  */ 
-function response(State st, Request request, string response) -> (State sr, IoAction[] as):
-    // Convert response into something usable.
-    return st,[]
+function response(State st, Request request, null|string _response) -> (State sr, IoAction[] as):
+    if _response is null:
+        // Indicates a failure of some kind
+        return st,[io::alert("Transmission Error")]
+    else:
+        // Convert response into something usable.
+        Response response = JSON::parse(_response)
+        //
+        switch response.kind:
+            case ROOM_STATE:
+                st = model::update(st)
+                return st, [io::alert("UPDATE CALLED")]
+        //
+        return st,[]
 
 // =========================================================================
 // Message I/O
 // =========================================================================
 
-final int CREATE_ROOM = 0
-final int REMOVE_ROOM = 1
-final int ENTER_ROOM = 2
-final int LEAVE_ROOM = 3
+final uint CREATE_ROOM = 0
+final uint REMOVE_ROOM = 1
+final uint ENTER_ROOM = 2
+final uint LEAVE_ROOM = 3
+final uint ROOM_STATE = 4
 
 // Represents a request from this client to the server.  All requests
 // match this format.
@@ -96,4 +112,13 @@ function send(string room, Request req) -> io::Post<State>:
     // Convert request into JSON
     string json = JSON::stringify(req)
     // Create actual POST action
-    return {url:room,payload:json,ok:&(State st, string r -> response(st,req,r)),error:&entering_failed}
+    return {
+        // room url
+        url:room,
+        // request (as JSON)
+        payload:json,
+        // ok handler
+        ok:&(State st, string r -> response(st,req,r)),
+        // error handler
+        error:&(State st -> response(st,req,null))
+    }
